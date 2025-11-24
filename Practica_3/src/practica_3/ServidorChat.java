@@ -130,14 +130,26 @@ public class ServidorChat {
                     if (salas.containsKey(nombreSala)) {
                         List<Cliente> usuarios = salas.get(nombreSala);
 
-                        // Buscamos al cliente para borrarlo
-                        // (Usamos removeIf para borrar por nombre de forma segura)
+                        // 1. Borrar al usuario de la lista
                         usuarios.removeIf(c -> c.nombre.equals(nombreUser));
-
                         System.out.println(nombreUser + " salió de " + nombreSala);
 
-                        // IMPORTANTE: Avisar a los demás que la lista cambió
+                        // 2. Actualizar la lista visual de usuarios (Ya lo tenías)
                         broadcastListaUsuarios(socket, nombreSala);
+
+                        // --- NUEVO: AVISAR EN EL CHAT QUE SALIÓ ---
+                        // Creamos un mensaje falso simulando ser el "Sistema" o "Servidor"
+                        String mensajeSalida = "<msg>" +
+                                               "<usr>SERVER</usr>" + 
+                                               "<texto>" + nombreUser + " ha abandonado la sala.</texto>" +
+                                               "<sala>" + nombreSala + "</sala>" +
+                                               "</msg>";
+
+                        // Reenviamos este aviso a todos los que quedan
+                        for (Cliente c : usuarios) {
+                            enviar(socket, mensajeSalida, c.ip, c.puerto);
+                        }
+                        // -------------------------------------------
                     }
                 }
                 // 7. MENSAJE PRIVADO (<privado>)
