@@ -30,7 +30,8 @@ public class ChatSala extends javax.swing.JFrame {
         this.socket = socket;
         lstUsuarios.setModel(modeloUsuarios);
 
-        setTitle("Sala: " + sala);
+        //setTitle("Sala: " + sala);
+        setTitle("Sala: " + sala + "  |  Usuario: " + usuario);
 
         // 1. PRIMERO: Empezamos a escuchar
         iniciarListener(); 
