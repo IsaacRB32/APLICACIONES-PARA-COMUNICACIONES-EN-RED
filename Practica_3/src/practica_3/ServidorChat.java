@@ -140,6 +140,28 @@ public class ServidorChat {
                         broadcastListaUsuarios(socket, nombreSala);
                     }
                 }
+                // 7. MENSAJE PRIVADO (<privado>)
+                else if (mensaje.contains("<privado>")) {
+                    String emisor = extraerTag(mensaje, "usr");
+                    String destinatario = extraerTag(mensaje, "dest");
+                    String texto = extraerTag(mensaje, "texto");
+                    String nombreSala = extraerTag(mensaje, "sala");
+
+                    if (salas.containsKey(nombreSala)) {
+                        List<Cliente> usuarios = salas.get(nombreSala);
+
+                        // Buscamos al destinatario en la lista
+                        for (Cliente c : usuarios) {
+                            System.out.println("Comparando destinatario del XML: '" + destinatario + "' con usuario en lista: '" + c.nombre + "'"); // <--- AGREGA ESTO
+                            if (c.nombre.equals(destinatario)) {
+                                // ¡EUREKA! Encontramos a quien va dirigido. Enviamos solo a él.
+                                enviar(socket, mensaje, c.ip, c.puerto);
+                                System.out.println("Privado de " + emisor + " para " + destinatario);
+                                break; // Ya lo encontramos, dejamos de buscar
+                            }
+                        }
+                    }
+                }
             }
 
         } catch (Exception e) {

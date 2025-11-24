@@ -47,7 +47,50 @@ public class ChatSala extends javax.swing.JFrame {
                  } catch (Exception ex) {}
             }
         });
+        // ========================================================
+        // CONFIGURACIÓN DEL MENÚ DE MENSAJES PRIVADOS (CLIC DERECHO)
+        // ========================================================
+        javax.swing.JPopupMenu menuUsuarios = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem itemPrivado = new javax.swing.JMenuItem("Enviar Mensaje Privado");
+        menuUsuarios.add(itemPrivado);
 
+        itemPrivado.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                // Obtenemos a quién le diste clic
+                String destinatario = lstUsuarios.getSelectedValue();
+
+                // Validaciones
+                if (destinatario == null) {
+                    javax.swing.JOptionPane.showMessageDialog(ChatSala.this, "Selecciona un usuario.");
+                    return;
+                }
+                if (destinatario.equals(usuario)) {
+                    javax.swing.JOptionPane.showMessageDialog(ChatSala.this, "No te escribas a ti mismo.");
+                    return;
+                }
+
+                // Pedimos el texto
+                String texto = javax.swing.JOptionPane.showInputDialog(ChatSala.this, "Privado para " + destinatario + ":");
+                if (texto != null && !texto.trim().isEmpty()) {
+
+                    // 1. Mostrarlo en MI propia pantalla (para saber qué envié)
+                    txtChat.append("[Privado a " + destinatario + "]: " + texto + "\n");
+
+                    // 2. Construir XML y Enviar al servidor
+                    String xmlPrivado = "<privado>" +
+                                        "<sala>" + sala + "</sala>" +
+                                        "<usr>" + usuario + "</usr>" +
+                                        "<dest>" + destinatario + "</dest>" +
+                                        "<texto>" + texto + "</texto>" +
+                                        "</privado>";
+                    enviarPaquete(xmlPrivado);
+                }
+            }
+        });
+
+        // Vinculamos el menú a la lista visual
+        lstUsuarios.setComponentPopupMenu(menuUsuarios);
+        // ========================================================
         // 3. TERCERO (EL ARREGLO): ¡Ahora sí avisamos que entramos!
         // Como el listener ya está corriendo arriba, capturaremos la respuesta de la lista.
         String entrarXML = "<entrar><usr>" + usuario + "</usr><sala>" + sala + "</sala></entrar>";
@@ -67,16 +110,35 @@ public class ChatSala extends javax.swing.JFrame {
 
                     String msg = new String(paquete.getData(), 0, paquete.getLength());
 
-                    // CASO 1: Mensaje normal (Ya lo tienes)
-                    if (msg.contains("<sala>" + sala + "</sala>") && msg.contains("<texto>")) { 
+                    // CASO 1: Mensaje normal (AGREGAMOS "msg.contains(<msg>)")
+                    if (msg.contains("<msg>") && msg.contains("<sala>" + sala + "</sala>") && msg.contains("<texto>")) { 
                         agregarMensaje(msg);
                     }
 
-                    // CASO 2: Actualización de Lista de Usuarios (NUEVO)
+                    // CASO 2: Lista
                     else if (msg.contains("<lista>") && msg.contains("<Sala>" + sala + "</Sala>")) {
                         actualizarListaUsuarios(msg);
                     }
 
+                    // CASO 3: Mensaje Privado
+                    else if (msg.contains("<privado>")) {
+                        // ... (Tu código para leer privados) ...
+                        try {
+                            int iUsr = msg.indexOf("<usr>");
+                            int fUsr = msg.indexOf("</usr>");
+                            String emisor = msg.substring(iUsr + 5, fUsr);
+
+                            int iTxt = msg.indexOf("<texto>");
+                            int fTxt = msg.indexOf("</texto>");
+                            String texto = msg.substring(iTxt + 7, fTxt);
+
+                            String linea = ">>> [Privado de " + emisor + "]: " + texto + "\n";
+
+                            javax.swing.SwingUtilities.invokeLater(() -> {
+                                txtChat.append(linea);
+                            });
+                        } catch (Exception e) {}
+                    }
                 } catch (Exception e) {
                     System.out.println("Error recibiendo: " + e.getMessage());
                 }
