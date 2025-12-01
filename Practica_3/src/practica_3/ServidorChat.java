@@ -49,7 +49,7 @@ public class ServidorChat {
             // Inicializamos una sala por defecto
             salas.put("General", new ArrayList<>());
 
-            byte[] buffer = new byte[2048];
+            byte[] buffer = new byte[4096];
 
             while (true) {
                 DatagramPacket paquete = new DatagramPacket(buffer, buffer.length);
@@ -172,6 +172,24 @@ public class ServidorChat {
                                 break; // Ya lo encontramos, dejamos de buscar
                             }
                         }
+                    }
+                }
+                // 8. FRAGMENTOS DE ARCHIVO (<fragment>) -> BROADCAST
+                // El servidor solo actúa como repetidor, no reensambla nada.
+                else if (mensaje.contains("<fragment>")) {
+                    String salaDestino = extraerTag(mensaje, "sala");
+
+                    if (salas.containsKey(salaDestino)) {
+                        List<Cliente> usuarios = salas.get(salaDestino);
+
+                        // Reenviar el pedacito a TODOS en esa sala
+                        for (Cliente c : usuarios) {
+                            enviar(socket, mensaje, c.ip, c.puerto);
+                        }
+
+                        // OPCIONAL: Comentamos el print para no saturar la consola con 
+                        // 500 mensajes si la imagen es grande.
+                        // System.out.println("Fragmento reenviado a sala " + salaDestino);
                     }
                 }
             }

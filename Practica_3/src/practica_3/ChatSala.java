@@ -18,6 +18,9 @@ public class ChatSala extends javax.swing.JFrame {
     private DatagramSocket socket;
     // Modelo para manipular la lista visualmente
     private javax.swing.DefaultListModel<String> modeloUsuarios = new javax.swing.DefaultListModel<>();
+    // Variable para almacenar los pedacitos de archivos que van llegando
+    // Mapa: ID_ARCHIVO -> (Numero_Secuencia -> Datos_Bytes)
+    private java.util.Map<String, java.util.Map<Integer, byte[]>> bufferRecepcion = new java.util.HashMap<>();
 
 
     /**
@@ -40,8 +43,6 @@ public class ChatSala extends javax.swing.JFrame {
         this.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
-                 // ... tu código de <leave> ...
-                 // (Puedes usar enviarPaquete("<leave>...") aquí también si quieres limpiar código)
                  try {
                     String salidaXML = "<leave><usr>" + usuario + "</usr><sala>" + sala + "</sala></leave>";
                     enviarPaquete(salidaXML); // Usando el nuevo método
@@ -105,7 +106,7 @@ public class ChatSala extends javax.swing.JFrame {
         Thread hilo = new Thread(() -> {
             while (true) {
                 try {
-                    byte[] buffer = new byte[2048];
+                    byte[] buffer = new byte[4096];
                     DatagramPacket paquete = new DatagramPacket(buffer, buffer.length);
                     socket.receive(paquete);
 
@@ -140,6 +141,10 @@ public class ChatSala extends javax.swing.JFrame {
                             });
                         } catch (Exception e) {}
                     }
+                    // CASO 4: FRAGMENTOS (Recepción de archivos)
+                    else if (msg.contains("<fragment>")) {
+                        procesarFragmento(msg);
+                    }
                 } catch (Exception e) {
                     System.out.println("Error recibiendo: " + e.getMessage());
                 }
@@ -151,7 +156,127 @@ public class ChatSala extends javax.swing.JFrame {
     }
     
     
-    
+    // ==========================================
+    // LÓGICA DE REENSAMBLAJE DE ARCHIVOS
+    // ==========================================
+    private void procesarFragmento(String xml) {
+        try {
+            // 1. Extraer metadatos usando método auxiliar
+            String fid = extraerValor(xml, "fid");
+            String usr = extraerValor(xml, "usr");
+            int seq = Integer.parseInt(extraerValor(xml, "seq"));
+            int total = Integer.parseInt(extraerValor(xml, "total"));
+            String dataBase64 = extraerValor(xml, "data");
+            
+            // 2. Inicializar buffer si es el primer pedazo que llega de este archivo
+            if (!bufferRecepcion.containsKey(fid)) {
+                bufferRecepcion.put(fid, new java.util.HashMap<>());
+            }
+            
+            // 3. Decodificar y guardar el pedazo en memoria
+            byte[] chunkBytes = java.util.Base64.getDecoder().decode(dataBase64);
+            bufferRecepcion.get(fid).put(seq, chunkBytes);
+            
+            // 4. Verificar si ya tenemos TODAS las piezas (Tamaño del mapa == Total esperado)
+            if (bufferRecepcion.get(fid).size() == total) {
+                System.out.println("Archivo " + fid + " completado (" + total + " partes). Reconstruyendo...");
+                reconstruirYMostrarImagen(fid, usr, total);
+            }
+            
+        } catch (Exception e) {
+            System.out.println("Error procesando fragmento: " + e.getMessage());
+        }
+    }
+
+    private void reconstruirYMostrarImagen(String fid, String autor, int totalParts) {
+        try {
+            // Calcular tamaño total
+            java.util.Map<Integer, byte[]> partes = bufferRecepcion.get(fid);
+            int totalSize = 0;
+            for (byte[] b : partes.values()) totalSize += b.length;
+
+            // --- DIAGNÓSTICO ---
+            System.out.println("DEBUG: Reconstruyendo imagen de " + totalSize + " bytes.");
+            // -------------------
+
+            // Pegar todos los bytes
+            byte[] imagenCompleta = new byte[totalSize];
+
+            int currentPos = 0;
+            for (int i = 1; i <= totalParts; i++) {
+                if (partes.containsKey(i)) {
+                    byte[] pedazo = partes.get(i);
+                    System.arraycopy(pedazo, 0, imagenCompleta, currentPos, pedazo.length);
+                    currentPos += pedazo.length;
+                } else {
+                    System.out.println("Falta el paquete " + i);
+                    return;
+                }
+            }
+            // === DIAGNÓSTICO DE CABECERA (AGREGA ESTO) ===
+            System.out.print("HEX DUMP (Primeros 4 bytes): ");
+            if (imagenCompleta.length >= 4) {
+                for(int k=0; k<4; k++) {
+                    System.out.printf("%02X ", imagenCompleta[k]);
+                }
+            }
+            System.out.println();
+
+            // Crear imagen
+            javax.swing.ImageIcon icono = new javax.swing.ImageIcon(imagenCompleta);
+
+            // --- DIAGNÓSTICO ---
+            if (icono.getIconWidth() <= 0) {
+                System.out.println("ERROR: La imagen se creó pero tiene ancho 0. ¿Es un formato válido (.png, .jpg)?");
+            } else {
+                System.out.println("ÉXITO: Imagen creada. Dimensiones: " + icono.getIconWidth() + "x" + icono.getIconHeight());
+            }
+            // -------------------
+
+            // Escalar
+            java.awt.Image imgEscalada = icono.getImage().getScaledInstance(400, -1, java.awt.Image.SCALE_SMOOTH);
+            javax.swing.ImageIcon iconoFinal = new javax.swing.ImageIcon(imgEscalada);
+
+            // Mostrar
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                if (autor.equals(this.usuario)) {
+                    // CASO A: SOY YO (El remitente)
+                    txtChat.append("Tú has enviado un Sticker\n");
+
+                    // Opcional: Si no quieres que te salte la ventana a ti mismo, comenta la línea de abajo.
+                    // O cámbiale el título para que tenga sentido:
+                    JOptionPane.showMessageDialog(null, 
+                        "Tu sticker se envió correctamente a la sala.", 
+                        "Sticker Enviado ✅", 
+                        JOptionPane.PLAIN_MESSAGE, 
+                        iconoFinal);
+
+                } else {
+                    // CASO B: ES OTRO (El destinatario)
+                    txtChat.append(autor + " ha enviado un Sticker\n");
+
+                    JOptionPane.showMessageDialog(null, 
+                        "Imagen recibida de: " + autor, 
+                        "Sticker Recibido 📩", 
+                        JOptionPane.PLAIN_MESSAGE, 
+                        iconoFinal);
+                }
+            });
+
+            bufferRecepcion.remove(fid);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Método simple para extraer valor de XML sin depender de librerías externas
+    private String extraerValor(String xml, String tag) {
+        int start = xml.indexOf("<" + tag + ">");
+        int end = xml.indexOf("</" + tag + ">");
+        if (start == -1 || end == -1) return "";
+        return xml.substring(start + tag.length() + 2, end);
+    }
     //actualizarListaUsuarios
     private void actualizarListaUsuarios(String xml) {
     try {
@@ -261,6 +386,7 @@ public class ChatSala extends javax.swing.JFrame {
         lstUsuarios = new javax.swing.JList<>();
         jLabel1 = new javax.swing.JLabel();
         btnSalir = new javax.swing.JButton();
+        btnSticker = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -293,6 +419,13 @@ public class ChatSala extends javax.swing.JFrame {
             }
         });
 
+        btnSticker.setText("Sticker");
+        btnSticker.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnStickerActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
@@ -300,10 +433,6 @@ public class ChatSala extends javax.swing.JFrame {
             .addGroup(layout.createSequentialGroup()
                 .addGap(19, 19, 19)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                        .addComponent(txtMensaje, javax.swing.GroupLayout.PREFERRED_SIZE, 289, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(btnEnviar))
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 108, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -314,8 +443,15 @@ public class ChatSala extends javax.swing.JFrame {
                                 .addGap(16, 16, 16)
                                 .addComponent(btnSalir)))
                         .addGap(18, 18, 18)
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 252, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 279, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(0, 0, Short.MAX_VALUE))
+                    .addGroup(layout.createSequentialGroup()
+                        .addComponent(txtMensaje, javax.swing.GroupLayout.PREFERRED_SIZE, 254, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnEnviar)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(btnSticker)))
+                .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -332,7 +468,8 @@ public class ChatSala extends javax.swing.JFrame {
                 .addGap(18, 18, 18)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(txtMensaje, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(btnEnviar))
+                    .addComponent(btnEnviar)
+                    .addComponent(btnSticker))
                 .addContainerGap(18, Short.MAX_VALUE))
         );
 
@@ -373,6 +510,70 @@ public class ChatSala extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_btnSalirActionPerformed
 
+    private void btnStickerActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnStickerActionPerformed
+        // TODO add your handling code here:
+        // 1. Selector de archivos
+        javax.swing.JFileChooser fileChooser = new javax.swing.JFileChooser();
+        int seleccion = fileChooser.showOpenDialog(this);
+
+        if (seleccion == javax.swing.JFileChooser.APPROVE_OPTION) {
+            // Usamos un Hilo nuevo para no congelar la ventana mientras envía los 500 paquetes
+            new Thread(() -> {
+                try {
+                    java.io.File archivo = fileChooser.getSelectedFile();
+                    byte[] fileBytes = java.nio.file.Files.readAllBytes(archivo.toPath());
+
+                    // Generar ID único para este archivo (Usuario + Tiempo)
+                    String fileID = usuario + "-" + System.currentTimeMillis();
+
+                    // Tamaño del pedazo (Chunk). 2048 bytes es seguro y eficiente.
+                    int chunkSize = 2048; 
+                    int totalParts = (int) Math.ceil((double) fileBytes.length / chunkSize);
+
+                    // Avisar en mi chat
+                    javax.swing.SwingUtilities.invokeLater(() -> 
+                        txtChat.append(">> Enviando imagen (" + totalParts + " partes)...\n")
+                    );
+
+                    for (int i = 0; i < totalParts; i++) {
+                        // a) Cortar el pedazo correspondiente
+                        int start = i * chunkSize;
+                        int length = Math.min(fileBytes.length - start, chunkSize);
+                        byte[] chunk = new byte[length];
+                        System.arraycopy(fileBytes, start, chunk, 0, length);
+
+                        // b) Convertir a Base64
+                        String chunkBase64 = java.util.Base64.getEncoder().encodeToString(chunk);
+
+                        // c) Armar el XML del fragmento
+                        // <fragment><sala>...</sala><usr>...</usr><fid>ID</fid><seq>1</seq><total>10</total><data>...</data></fragment>
+                        String xmlFrag = "<fragment>" +
+                                         "<sala>" + sala + "</sala>" +
+                                         "<usr>" + usuario + "</usr>" +
+                                         "<fid>" + fileID + "</fid>" +
+                                         "<seq>" + (i + 1) + "</seq>" +
+                                         "<total>" + totalParts + "</total>" +
+                                         "<data>" + chunkBase64 + "</data>" +
+                                         "</fragment>";
+
+                        // d) Enviar
+                        enviarPaquete(xmlFrag);
+
+                        // IMPORTANTE: Pausa milimétrica para no ahogar la red
+                        Thread.sleep(5); 
+                    }
+
+                    javax.swing.SwingUtilities.invokeLater(() -> 
+                        txtChat.append(">> Imagen enviada correctamente.\n")
+                    );
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+        }
+    }//GEN-LAST:event_btnStickerActionPerformed
+
     /**
      * @param args the command line arguments
      */
@@ -380,6 +581,7 @@ public class ChatSala extends javax.swing.JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton btnEnviar;
     private javax.swing.JButton btnSalir;
+    private javax.swing.JButton btnSticker;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
