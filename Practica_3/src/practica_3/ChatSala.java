@@ -481,7 +481,7 @@ public class ChatSala extends javax.swing.JFrame {
                 int totalParts = (int) Math.ceil((double) fileBytes.length / chunkSize);
 
                 javax.swing.SwingUtilities.invokeLater(() -> 
-                    txtChat.append(">> Enviando nota de voz (" + totalParts + " partes)...\n")
+                    txtChat.append(">> Enviando nota de voz...\n")
                 );
 
                 for (int i = 0; i < totalParts; i++) {
@@ -693,7 +693,7 @@ public class ChatSala extends javax.swing.JFrame {
 
                     // Avisar en mi chat
                     javax.swing.SwingUtilities.invokeLater(() -> 
-                        txtChat.append(">> Enviando imagen (" + totalParts + " partes)...\n")
+                        txtChat.append(">> Enviando sticker ...\n")
                     );
 
                     for (int i = 0; i < totalParts; i++) {
@@ -725,7 +725,7 @@ public class ChatSala extends javax.swing.JFrame {
                     }
 
                     javax.swing.SwingUtilities.invokeLater(() -> 
-                        txtChat.append(">> Imagen enviada correctamente.\n")
+                        txtChat.append(">> Sticker enviado correctamente.\n")
                     );
 
                 } catch (Exception e) {
@@ -772,7 +772,7 @@ public class ChatSala extends javax.swing.JFrame {
                 recordingThread.start();
                 isRecording = true;
                 btnGrabar.setText("Parar");
-                txtChat.append(">> Grabando audio... 🎙️\n");
+                txtChat.append(">> Grabando audio...️\n");
 
             } catch (Exception e) {
                 e.printStackTrace();
