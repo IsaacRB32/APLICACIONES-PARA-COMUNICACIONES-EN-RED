@@ -37,7 +37,7 @@ public class SalaSelector extends javax.swing.JFrame {
         actualizarSalas();
     }
     
-    // NUEVO MÉTODO: Hilo que siempre está atento a lo que dice el servidor
+    // Hilo que siempre está atento a lo que dice el servidor
     private void iniciarListener() {
         Thread hilo = new Thread(() -> {
             while (escuchando) {
@@ -57,7 +57,7 @@ public class SalaSelector extends javax.swing.JFrame {
         hilo.start();
     }
 
-    // NUEVO MÉTODO: Analiza qué llegó del servidor
+    // Analiza qué llegó del servidor
     private void procesarMensaje(String xml) {
     if (xml.contains("<salas>")) {
         // ENVOLVER ESTO PARA PROTEGER LA GUI

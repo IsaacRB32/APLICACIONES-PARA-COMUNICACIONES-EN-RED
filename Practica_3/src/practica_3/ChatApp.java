@@ -15,7 +15,7 @@ import practica_3.SalaSelector;
  * @author isaac
  */
 public class ChatApp extends javax.swing.JFrame {
-    // ===== Variables globales del cliente =====
+    // Variables globales del cliente
     private DatagramSocket socket;
     private String usuario;
 

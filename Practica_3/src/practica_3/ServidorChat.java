@@ -21,9 +21,9 @@ public class ServidorChat {
     
     // Clase auxiliar para guardar quién es quién
     static class Cliente {
-        InetAddress ip;
-        int puerto;
-        String nombre;
+        InetAddress ip; //Ip del cliente
+        int puerto; //IP del cliente
+        String nombre; //Para mostrar el nombre del cliente
 
         public Cliente(InetAddress ip, int puerto, String nombre) {
             this.ip = ip;
@@ -32,6 +32,7 @@ public class ServidorChat {
         }
         
         // Para evitar duplicados en la lista (basado en IP y Puerto)
+        // Son iguales si tiene el mismo IP
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -44,7 +45,7 @@ public class ServidorChat {
     public static void main(String[] args) {
         try {
             DatagramSocket socket = new DatagramSocket(PUERTO);
-            System.out.println("✅ Servidor iniciado en puerto " + PUERTO);
+            System.out.println("Servidor iniciado en puerto " + PUERTO);
 
             // Inicializamos una sala por defecto
             salas.put("General", new ArrayList<>());
@@ -52,9 +53,11 @@ public class ServidorChat {
             byte[] buffer = new byte[4096];
 
             while (true) {
+                //Es el contenedor que usará el socket para depositar los datos
                 DatagramPacket paquete = new DatagramPacket(buffer, buffer.length);
                 socket.receive(paquete);
-
+                
+                //-----------------Traducir de Bytes a Texto--------------
                 String mensaje = new String(paquete.getData(), 0, paquete.getLength());
                 InetAddress ipCliente = paquete.getAddress();
                 int puertoCliente = paquete.getPort();
@@ -98,7 +101,7 @@ public class ServidorChat {
                             usuariosEnSala.add(nuevo);
                         }
                         System.out.println(nombreUser + " entró a " + nombreSala);
-                        // === NUEVO: ENVIAR LISTA ACTUALIZADA A TODOS ===
+                        // ENVIAR LISTA ACTUALIZADA A TODOS
                         broadcastListaUsuarios(socket, nombreSala);
                     }
                 }
@@ -137,7 +140,7 @@ public class ServidorChat {
                         // 2. Actualizar la lista visual de usuarios (Ya lo tenías)
                         broadcastListaUsuarios(socket, nombreSala);
 
-                        // --- NUEVO: AVISAR EN EL CHAT QUE SALIÓ ---
+                        // --- AVISAR EN EL CHAT QUE SALIÓ ---
                         // Creamos un mensaje falso simulando ser el "Sistema" o "Servidor"
                         String mensajeSalida = "<msg>" +
                                                "<usr>SERVER</usr>" + 
@@ -186,10 +189,6 @@ public class ServidorChat {
                         for (Cliente c : usuarios) {
                             enviar(socket, mensaje, c.ip, c.puerto);
                         }
-
-                        // OPCIONAL: Comentamos el print para no saturar la consola con 
-                        // 500 mensajes si la imagen es grande.
-                        // System.out.println("Fragmento reenviado a sala " + salaDestino);
                     }
                 }
             }
